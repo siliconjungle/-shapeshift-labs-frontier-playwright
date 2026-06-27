@@ -3,15 +3,19 @@ import {
   createFrontierAiEvidence,
   configureFrontierPlaywright,
   createFrontierAiSession,
+  createFrontierPlaywrightRuntimeProofBuilderFields,
+  createFrontierPlaywrightRuntimeProofEvidence,
   createFrontierTimelineReport,
   createFrontierPlaywrightProbe,
   decodeFrontierTimelineJsonl,
   domProbe,
   encodeFrontierTimelineJsonl,
   frontierDomDevtoolsProbe,
+  frontierPlaywrightRuntimeEvidenceHash,
   frontierTimelineReportToLogRecords,
   installFrontierPlaywrightProbe,
   markFrontierTimeline,
+  normalizeRuntimeProofSignals,
   queryFrontierTimeline,
   readFrontierTimeline,
   runFrontierAiStep,
@@ -28,6 +32,8 @@ import {
   type FrontierPlaywrightLogRecord,
   type FrontierPlaywrightPageLike,
   type FrontierPlaywrightProbe,
+  type FrontierPlaywrightRuntimeProofBuilderFields,
+  type FrontierPlaywrightRuntimeProofEvidence,
   type FrontierPlaywrightSample,
   type FrontierPlaywrightTimelineQueryPlan,
   type FrontierPlaywrightTimelineReport,
@@ -93,6 +99,15 @@ const evidenceBundle: FrontierPlaywrightAiEvidence = createFrontierAiEvidence(ti
 const sessionEvidence: FrontierPlaywrightAiEvidence = await ai.evidence(plans, {
   includeLogRecords: true
 });
+const runtimeProofEvidence: FrontierPlaywrightRuntimeProofEvidence = createFrontierPlaywrightRuntimeProofEvidence({
+  command: 'playwright test html-runtime.spec.ts',
+  probeId: 'html:script-runtime-boundary',
+  runtimeSignals: ['html-script-runtime'],
+  report
+});
+const runtimeProofBuilderFields: FrontierPlaywrightRuntimeProofBuilderFields = createFrontierPlaywrightRuntimeProofBuilderFields(runtimeProofEvidence);
+const runtimeSignals: readonly string[] = normalizeRuntimeProofSignals('html-script-runtime', { 'css-cascade-runtime': true });
+const runtimeEvidenceHash: string = frontierPlaywrightRuntimeEvidenceHash({ report });
 const jsonl: string = encodeFrontierTimelineJsonl(timeline);
 const decoded: FrontierPlaywrightSample[] = decodeFrontierTimelineJsonl(jsonl);
 const evidence: FrontierPlaywrightEvidenceMatch[] = report.queries[0].matches;
@@ -108,6 +123,10 @@ void aiStep;
 void aiReport;
 void evidenceBundle;
 void sessionEvidence;
+void runtimeProofEvidence;
+void runtimeProofBuilderFields;
+void runtimeSignals;
+void runtimeEvidenceHash;
 void decoded;
 void evidence;
 void records;

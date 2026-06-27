@@ -4,13 +4,17 @@ import {
   collectFrontierSnapshot,
   createFrontierAiSession,
   createFrontierAiEvidence,
+  createFrontierPlaywrightRuntimeProofBuilderFields,
+  createFrontierPlaywrightRuntimeProofEvidence,
   createFrontierTimelineReport,
   createFrontierPlaywrightProbe,
   decodeFrontierTimelineJsonl,
   domProbe,
   encodeFrontierTimelineJsonl,
   frontierTimelineReportToLogRecords,
+  frontierPlaywrightRuntimeEvidenceHash,
   frontierDomDevtoolsProbe,
+  normalizeRuntimeProofSignals,
   queryFrontierTimeline,
   runFrontierAiStep,
   stateProbe,
@@ -190,6 +194,32 @@ assert.strictEqual(evidence.kind, 'frontier.playwright.ai.evidence');
 assert.strictEqual(evidence.runId, 'run-test');
 assert.ok(evidence.jsonl.includes('frontier.playwright.sample'));
 assert.strictEqual(evidence.logRecords[0].attributes.runId, 'run-test');
+
+const runtimeProofEvidence = createFrontierPlaywrightRuntimeProofEvidence({
+  id: 'proof-html-script',
+  command: 'playwright test html-runtime.spec.ts',
+  probeId: 'html:script-runtime-boundary',
+  runtimeSignals: { 'html-script-runtime': 'passed', ignored: false },
+  report: evidence.report,
+  metadata: { sourcePath: 'view.html', reasonCode: 'script-runtime-boundary' }
+});
+assert.strictEqual(runtimeProofEvidence.kind, 'frontier.playwright.runtime-proof-evidence');
+assert.strictEqual(runtimeProofEvidence.runtimeEvidenceBound, true);
+assert.strictEqual(runtimeProofEvidence.browserRuntimeEquivalenceClaim, false);
+assert.ok(runtimeProofEvidence.runtimeEvidenceHash.startsWith('fnv1a32:'));
+assert.deepStrictEqual(normalizeRuntimeProofSignals(['css-cascade-runtime'], { 'html-script-runtime': true }), ['css-cascade-runtime', 'html-script-runtime']);
+
+const builderFields = createFrontierPlaywrightRuntimeProofBuilderFields(runtimeProofEvidence);
+assert.strictEqual(builderFields.runtimeEvidence.evidenceHash, runtimeProofEvidence.runtimeEvidenceHash);
+assert.strictEqual(builderFields.autoMergeClaim, false);
+assert.strictEqual(frontierPlaywrightRuntimeEvidenceHash({ a: 1, b: 2 }), frontierPlaywrightRuntimeEvidenceHash({ b: 2, a: 1 }));
+assert.strictEqual(createFrontierPlaywrightRuntimeProofEvidence({
+  status: 'unknown',
+  command: 'playwright test html-runtime.spec.ts',
+  probeId: 'html:script-runtime-boundary',
+  runtimeSignals: ['html-script-runtime'],
+  report: evidence.report
+}).runtimeEvidenceBound, false);
 
 const standaloneEvidence = createFrontierAiEvidence(await ai.timeline(), [
   { id: 'dom', query: { source: 'dom', id: 'actions' }, limit: 1 }

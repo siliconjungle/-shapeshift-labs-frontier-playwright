@@ -1,3 +1,5 @@
+export * from './runtime-proof.js';
+
 export type FrontierPlaywrightJsonPrimitive = null | boolean | number | string;
 export type FrontierPlaywrightJsonValue =
   | FrontierPlaywrightJsonPrimitive
