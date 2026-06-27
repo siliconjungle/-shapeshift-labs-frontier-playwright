@@ -345,13 +345,21 @@ For semantic-merge admission, `runFrontierPlaywrightRuntimeProof(...)` wraps the
 ```ts
 import {
   domProbe,
-  runFrontierPlaywrightRuntimeProof,
+  runFrontierPlaywrightSourceRuntimeProof,
   stateProbe
 } from '@shapeshift-labs/frontier-playwright';
 import { createHtmlRuntimeProof } from '@shapeshift-labs/frontier-lang-html';
 
-const run = await runFrontierPlaywrightRuntimeProof(page, {
+const run = await runFrontierPlaywrightSourceRuntimeProof(page, {
   runId: 'html-runtime-proof',
+  sourcePath: 'view.html',
+  reasonCode: 'script-runtime-boundary',
+  side: 'worker',
+  recordKey: 'text#script[1]/#text[1]',
+  base,
+  worker,
+  head,
+  output,
   state: [stateProbe('app', 'window.appState', { paths: ['/ready'] })],
   dom: [domProbe('root', '[data-frontier-root]', { include: ['text'] })],
   command: 'playwright test html-runtime.spec.ts',
@@ -368,17 +376,7 @@ const run = await runFrontierPlaywrightRuntimeProof(page, {
   }
 });
 
-const proof = createHtmlRuntimeProof({
-  sourcePath: 'view.html',
-  reasonCode: 'script-runtime-boundary',
-  side: 'worker',
-  recordKey: 'text#script[1]/#text[1]',
-  base,
-  worker,
-  head,
-  output,
-  ...run.builderFields
-});
+const proof = createHtmlRuntimeProof(run.proofBuilderInput);
 
 console.log(run.runtimeEvidence.runtimeEvidenceBound);
 console.log(proof.browserRuntimeEquivalenceClaim);

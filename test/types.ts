@@ -19,6 +19,7 @@ import {
   queryFrontierTimeline,
   readFrontierTimeline,
   runFrontierPlaywrightRuntimeProof,
+  runFrontierPlaywrightSourceRuntimeProof,
   runFrontierAiStep,
   stateProbe,
   summarizeFrontierTimeline,
@@ -37,6 +38,9 @@ import {
   type FrontierPlaywrightRuntimeProofEvidence,
   type FrontierPlaywrightRuntimeProofRunOptions,
   type FrontierPlaywrightRuntimeProofRunResult,
+  type FrontierPlaywrightSourceRuntimeProofBuilderInput,
+  type FrontierPlaywrightSourceRuntimeProofRunOptions,
+  type FrontierPlaywrightSourceRuntimeProofRunResult,
   type FrontierPlaywrightSample,
   type FrontierPlaywrightTimelineQueryPlan,
   type FrontierPlaywrightTimelineReport,
@@ -121,6 +125,19 @@ const runtimeProofRunOptions: FrontierPlaywrightRuntimeProofRunOptions<string> =
   action: async () => 'ok'
 };
 const runtimeProofRun: FrontierPlaywrightRuntimeProofRunResult<string> = await runFrontierPlaywrightRuntimeProof(page, runtimeProofRunOptions);
+const sourceRuntimeProofRunOptions: FrontierPlaywrightSourceRuntimeProofRunOptions<string> = {
+  ...runtimeProofRunOptions,
+  sourcePath: 'view.html',
+  reasonCode: 'script-runtime-boundary',
+  side: 'worker',
+  recordKey: 'text#script[1]/#text[1]',
+  base: '<script>window.value = 1;</script>\n',
+  workerSourceText: '<script>window.value = 2;</script>\n',
+  head: '<script>window.value = 1;</script>\n',
+  outputSourceText: '<script>window.value = 2;</script>\n'
+};
+const sourceRuntimeProofRun: FrontierPlaywrightSourceRuntimeProofRunResult<string> = await runFrontierPlaywrightSourceRuntimeProof(page, sourceRuntimeProofRunOptions);
+const sourceRuntimeProofBuilderInput: FrontierPlaywrightSourceRuntimeProofBuilderInput = sourceRuntimeProofRun.proofBuilderInput;
 const jsonl: string = encodeFrontierTimelineJsonl(timeline);
 const decoded: FrontierPlaywrightSample[] = decodeFrontierTimelineJsonl(jsonl);
 const evidence: FrontierPlaywrightEvidenceMatch[] = report.queries[0].matches;
@@ -141,6 +158,8 @@ void runtimeProofBuilderFields;
 void runtimeSignals;
 void runtimeEvidenceHash;
 void runtimeProofRun;
+void sourceRuntimeProofRun;
+void sourceRuntimeProofBuilderInput;
 void decoded;
 void evidence;
 void records;

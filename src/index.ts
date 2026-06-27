@@ -336,6 +336,68 @@ export interface FrontierPlaywrightRuntimeProofRunResult<T = unknown> {
   readonly builderFields: FrontierPlaywrightRuntimeProofBuilderFields;
 }
 
+export interface FrontierPlaywrightSourceRuntimeProofBuilderInput extends FrontierPlaywrightRuntimeProofBuilderFields {
+  readonly sourcePath?: string;
+  readonly reasonCode?: string;
+  readonly reasonCodes?: readonly string[];
+  readonly side?: string;
+  readonly sides?: readonly string[];
+  readonly recordKey?: string;
+  readonly recordKeys?: readonly string[];
+  readonly boundary?: string;
+  readonly boundaries?: readonly string[];
+  readonly boundaryAttributes?: readonly string[];
+  readonly attributeName?: string;
+  readonly attributeNames?: readonly string[];
+  readonly shapeKey?: string;
+  readonly shapeKeys?: readonly string[];
+  readonly base?: string;
+  readonly worker?: string;
+  readonly head?: string;
+  readonly output?: string;
+  readonly baseSourceText?: string;
+  readonly workerSourceText?: string;
+  readonly headSourceText?: string;
+  readonly outputSourceText?: string;
+}
+
+export interface FrontierPlaywrightSourceRuntimeProofRunOptions<T = unknown> extends FrontierPlaywrightRuntimeProofRunOptions<T> {
+  readonly sourcePath?: string;
+  readonly reasonCode?: string;
+  readonly reasonCodes?: readonly string[];
+  readonly side?: string;
+  readonly sides?: readonly string[];
+  readonly recordKey?: string;
+  readonly recordKeys?: readonly string[];
+  readonly boundary?: string;
+  readonly boundaries?: readonly string[];
+  readonly boundaryAttributes?: readonly string[];
+  readonly attributeName?: string;
+  readonly attributeNames?: readonly string[];
+  readonly shapeKey?: string;
+  readonly shapeKeys?: readonly string[];
+  readonly base?: string;
+  readonly worker?: string;
+  readonly head?: string;
+  readonly output?: string;
+  readonly baseSourceText?: string;
+  readonly workerSourceText?: string;
+  readonly headSourceText?: string;
+  readonly outputSourceText?: string;
+}
+
+export interface FrontierPlaywrightSourceRuntimeProofRunResult<T = unknown> {
+  readonly kind: 'frontier.playwright.source-runtime-proof-run';
+  readonly version: 1;
+  readonly id: string;
+  readonly runId: string;
+  readonly step?: FrontierPlaywrightAiStepResult<Awaited<T>>;
+  readonly evidence: FrontierPlaywrightAiEvidence;
+  readonly runtimeEvidence: FrontierPlaywrightRuntimeProofEvidence;
+  readonly builderFields: FrontierPlaywrightRuntimeProofBuilderFields;
+  readonly proofBuilderInput: FrontierPlaywrightSourceRuntimeProofBuilderInput;
+}
+
 export interface FrontierPlaywrightLogRecord {
   level: 'info';
   message: string;
@@ -563,6 +625,77 @@ export async function runFrontierPlaywrightRuntimeProof<T = unknown>(
     evidence,
     runtimeEvidence,
     builderFields: createFrontierPlaywrightRuntimeProofBuilderFields(runtimeEvidence)
+  };
+}
+
+export async function runFrontierPlaywrightSourceRuntimeProof<T = unknown>(
+  page: FrontierPlaywrightPageLike,
+  options: FrontierPlaywrightSourceRuntimeProofRunOptions<T>
+): Promise<FrontierPlaywrightSourceRuntimeProofRunResult<T>> {
+  const {
+    sourcePath,
+    reasonCode,
+    reasonCodes,
+    side,
+    sides,
+    recordKey,
+    recordKeys,
+    boundary,
+    boundaries,
+    boundaryAttributes,
+    attributeName,
+    attributeNames,
+    shapeKey,
+    shapeKeys,
+    base,
+    worker,
+    head,
+    output,
+    baseSourceText,
+    workerSourceText,
+    headSourceText,
+    outputSourceText,
+    ...runtimeOptions
+  } = options;
+  const runtimeRun = await runFrontierPlaywrightRuntimeProof(page, runtimeOptions);
+  const baseText = firstOptionalString(base, baseSourceText);
+  const workerText = firstOptionalString(worker, workerSourceText);
+  const headText = firstOptionalString(head, headSourceText);
+  const outputText = firstOptionalString(output, outputSourceText);
+  return {
+    kind: 'frontier.playwright.source-runtime-proof-run',
+    version: 1,
+    id: runtimeRun.id,
+    runId: runtimeRun.runId,
+    step: runtimeRun.step,
+    evidence: runtimeRun.evidence,
+    runtimeEvidence: runtimeRun.runtimeEvidence,
+    builderFields: runtimeRun.builderFields,
+    proofBuilderInput: compactSourceRuntimeProofBuilderInput({
+      sourcePath,
+      reasonCode,
+      reasonCodes,
+      side,
+      sides,
+      recordKey,
+      recordKeys,
+      boundary,
+      boundaries,
+      boundaryAttributes,
+      attributeName,
+      attributeNames,
+      shapeKey,
+      shapeKeys,
+      base: baseText,
+      worker: workerText,
+      head: headText,
+      output: outputText,
+      baseSourceText: baseSourceText ?? baseText,
+      workerSourceText: workerSourceText ?? workerText,
+      headSourceText: headSourceText ?? headText,
+      outputSourceText: outputSourceText ?? outputText,
+      ...runtimeRun.builderFields
+    })
   };
 }
 
@@ -1273,6 +1406,18 @@ function compactRuntimeProofRunMetadata(input: Readonly<Record<string, unknown>>
     if (value !== undefined) out[key] = value;
   }
   return Object.keys(out).length ? out : undefined;
+}
+
+function compactSourceRuntimeProofBuilderInput(input: FrontierPlaywrightSourceRuntimeProofBuilderInput): FrontierPlaywrightSourceRuntimeProofBuilderInput {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (value !== undefined) out[key] = value;
+  }
+  return out as unknown as FrontierPlaywrightSourceRuntimeProofBuilderInput;
+}
+
+function firstOptionalString(...values: readonly unknown[]): string | undefined {
+  return values.find((value): value is string => typeof value === 'string' && value.length > 0);
 }
 
 function serializeError(error: unknown): FrontierPlaywrightSerializedError {

@@ -17,6 +17,7 @@ import {
   normalizeRuntimeProofSignals,
   queryFrontierTimeline,
   runFrontierPlaywrightRuntimeProof,
+  runFrontierPlaywrightSourceRuntimeProof,
   runFrontierAiStep,
   stateProbe,
   summarizeFrontierTimeline
@@ -250,6 +251,39 @@ assert.strictEqual(runtimeRun.runtimeEvidence.runtimeEvidenceBound, true);
 assert.strictEqual(runtimeRun.runtimeEvidence.browserRuntimeEquivalenceClaim, false);
 assert.strictEqual(runtimeRun.builderFields.runtimeEvidence.evidenceHash, runtimeRun.runtimeEvidence.runtimeEvidenceHash);
 assert.strictEqual(runtimeRun.evidence.report.queries[0].count, 1);
+
+const sourceRuntimePage = new FakePage();
+const sourceRuntimeRun = await runFrontierPlaywrightSourceRuntimeProof(sourceRuntimePage, {
+  runId: 'source-runtime-proof-run',
+  sourcePath: 'view.html',
+  reasonCode: 'script-runtime-boundary',
+  side: 'worker',
+  recordKey: 'text#script[1]/#text[1]',
+  base: '<script>window.value = 1;</script>\n',
+  worker: '<script>window.value = 2;</script>\n',
+  head: '<script>window.value = 1;</script>\n',
+  output: '<script>window.value = 2;</script>\n',
+  state: [stateProbe('app', 'window.appState', { paths: ['/count'] })],
+  command: 'playwright test html-runtime.spec.ts',
+  probeId: 'html:script-runtime-boundary',
+  runtimeSignals: ['html-script-runtime'],
+  queries: [
+    { id: 'count-runtime', query: { source: 'state', id: 'app', path: '/count', changed: true }, limit: 2 }
+  ],
+  action: async () => {
+    sourceRuntimePage.context.appState.count = 8;
+  },
+  stepOptions: {
+    waitFor: { source: 'state', id: 'app', path: '/count', changed: true },
+    timeoutMs: 500,
+    intervalMs: 5
+  }
+});
+assert.strictEqual(sourceRuntimeRun.kind, 'frontier.playwright.source-runtime-proof-run');
+assert.strictEqual(sourceRuntimeRun.proofBuilderInput.sourcePath, 'view.html');
+assert.strictEqual(sourceRuntimeRun.proofBuilderInput.reasonCode, 'script-runtime-boundary');
+assert.strictEqual(sourceRuntimeRun.proofBuilderInput.baseSourceText, sourceRuntimeRun.proofBuilderInput.base);
+assert.strictEqual(sourceRuntimeRun.proofBuilderInput.runtimeEvidence.evidenceHash, sourceRuntimeRun.runtimeEvidence.runtimeEvidenceHash);
 
 const standaloneEvidence = createFrontierAiEvidence(await ai.timeline(), [
   { id: 'dom', query: { source: 'dom', id: 'actions' }, limit: 1 }
