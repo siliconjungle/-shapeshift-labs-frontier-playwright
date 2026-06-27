@@ -1,3 +1,12 @@
+import {
+  createFrontierPlaywrightRuntimeProofBuilderFields,
+  createFrontierPlaywrightRuntimeProofEvidence,
+  type FrontierPlaywrightRuntimeProofBuilderFields,
+  type FrontierPlaywrightRuntimeProofEvidence,
+  type FrontierPlaywrightRuntimeProofEvidenceInput,
+  type FrontierPlaywrightRuntimeProofSignals
+} from './runtime-proof.js';
+
 export * from './runtime-proof.js';
 
 export type FrontierPlaywrightJsonPrimitive = null | boolean | number | string;
@@ -290,6 +299,43 @@ export interface FrontierPlaywrightAiEvidence {
   logRecords?: FrontierPlaywrightLogRecord[];
 }
 
+export interface FrontierPlaywrightRuntimeProofRunOptions<T = unknown> extends FrontierPlaywrightAiSessionOptions {
+  readonly id?: string;
+  readonly command?: string;
+  readonly commandId?: string;
+  readonly runtimeCommand?: string;
+  readonly browserCommand?: string;
+  readonly probeId?: string;
+  readonly runtimeProbeId?: string;
+  readonly browserProbeId?: string;
+  readonly runtimeSignals?: FrontierPlaywrightRuntimeProofSignals;
+  readonly browserSignals?: FrontierPlaywrightRuntimeProofSignals;
+  readonly evidenceSignals?: FrontierPlaywrightRuntimeProofSignals;
+  readonly queries?: readonly FrontierPlaywrightTimelineQueryPlan[];
+  readonly action?: (session: FrontierPlaywrightAiSession) => T | Promise<T>;
+  readonly stepLabel?: string;
+  readonly stepOptions?: FrontierPlaywrightAiStepOptions;
+  readonly evidenceOptions?: FrontierPlaywrightAiEvidenceOptions;
+  readonly status?: FrontierPlaywrightRuntimeProofEvidenceInput['status'];
+  readonly runtimeEvidenceHash?: string;
+  readonly browserEvidenceHash?: string;
+  readonly evidenceHash?: string;
+  readonly metadata?: Readonly<Record<string, unknown>>;
+  readonly clearBefore?: boolean;
+  readonly sampleInitial?: boolean;
+}
+
+export interface FrontierPlaywrightRuntimeProofRunResult<T = unknown> {
+  readonly kind: 'frontier.playwright.runtime-proof-run';
+  readonly version: 1;
+  readonly id: string;
+  readonly runId: string;
+  readonly step?: FrontierPlaywrightAiStepResult<Awaited<T>>;
+  readonly evidence: FrontierPlaywrightAiEvidence;
+  readonly runtimeEvidence: FrontierPlaywrightRuntimeProofEvidence;
+  readonly builderFields: FrontierPlaywrightRuntimeProofBuilderFields;
+}
+
 export interface FrontierPlaywrightLogRecord {
   level: 'info';
   message: string;
@@ -436,6 +482,88 @@ export async function createFrontierAiSession(
   const { runId, defaultStep, ...installOptions } = options;
   const probe = await createFrontierPlaywrightProbe(page, installOptions);
   return new FrontierPlaywrightAiSessionImpl(probe, runId ?? createRunId(), defaultStep ?? {});
+}
+
+export async function runFrontierPlaywrightRuntimeProof<T = unknown>(
+  page: FrontierPlaywrightPageLike,
+  options: FrontierPlaywrightRuntimeProofRunOptions<T>
+): Promise<FrontierPlaywrightRuntimeProofRunResult<T>> {
+  const {
+    id,
+    command,
+    commandId,
+    runtimeCommand,
+    browserCommand,
+    probeId,
+    runtimeProbeId,
+    browserProbeId,
+    runtimeSignals,
+    browserSignals,
+    evidenceSignals,
+    queries = [],
+    action,
+    stepLabel = 'runtime proof',
+    stepOptions,
+    evidenceOptions,
+    status,
+    runtimeEvidenceHash,
+    browserEvidenceHash,
+    evidenceHash,
+    metadata,
+    clearBefore = true,
+    sampleInitial = true,
+    ...sessionOptions
+  } = options;
+  const session = await createFrontierAiSession(page, sessionOptions);
+  if (clearBefore) await session.clear();
+  let step: FrontierPlaywrightAiStepResult<Awaited<T>> | undefined;
+  if (action) {
+    step = await session.step(stepLabel, () => action(session), stepOptions);
+  } else if (sampleInitial) {
+    await session.sample({ label: stepLabel + ':sample' });
+  }
+  const evidence = await session.evidence(queries, {
+    includeJsonl: true,
+    includeLogRecords: true,
+    includeTimeline: true,
+    runId: session.runId,
+    ...evidenceOptions
+  });
+  const runtimeEvidence = createFrontierPlaywrightRuntimeProofEvidence({
+    id: id ?? createRuntimeProofRunId(session.runId, stepLabel),
+    status: status ?? (step?.error ? 'failed' : 'passed'),
+    command,
+    commandId,
+    runtimeCommand,
+    browserCommand,
+    probeId,
+    runtimeProbeId,
+    browserProbeId,
+    runtimeEvidenceHash,
+    browserEvidenceHash,
+    evidenceHash,
+    runtimeSignals,
+    browserSignals,
+    evidenceSignals,
+    report: evidence.report,
+    timeline: evidence.report.timeline,
+    metadata: compactRuntimeProofRunMetadata({
+      runId: session.runId,
+      stepId: step?.id,
+      stepLabel,
+      ...(metadata ?? {})
+    })
+  });
+  return {
+    kind: 'frontier.playwright.runtime-proof-run',
+    version: 1,
+    id: runtimeEvidence.id ?? createRuntimeProofRunId(session.runId, stepLabel),
+    runId: session.runId,
+    step,
+    evidence,
+    runtimeEvidence,
+    builderFields: createFrontierPlaywrightRuntimeProofBuilderFields(runtimeEvidence)
+  };
 }
 
 export function queryFrontierTimeline(
@@ -1132,6 +1260,19 @@ function createStepId(label: string): string {
   stepCounter += 1;
   const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48) || 'step';
   return 'step-' + stepCounter.toString(36) + '-' + slug;
+}
+
+function createRuntimeProofRunId(runId: string, label: string): string {
+  const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48) || 'runtime-proof';
+  return runId + '-' + slug;
+}
+
+function compactRuntimeProofRunMetadata(input: Readonly<Record<string, unknown>>): Readonly<Record<string, unknown>> | undefined {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (value !== undefined) out[key] = value;
+  }
+  return Object.keys(out).length ? out : undefined;
 }
 
 function serializeError(error: unknown): FrontierPlaywrightSerializedError {

@@ -1,6 +1,6 @@
 {
   "name": "@shapeshift-labs/frontier-playwright",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Playwright telemetry and timeline helpers for Frontier state and DOM inspection.",
   "type": "module",
   "license": "MIT",

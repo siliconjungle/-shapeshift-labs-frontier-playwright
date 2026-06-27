@@ -338,6 +338,54 @@ await writeLogs(evidence.logRecords);
 
 The harness intentionally returns plain JSON-shaped evidence. `frontier.evidence(...)` reads the browser timeline once, then produces the report, optional JSONL export, and optional structural log records from that same snapshot. `frontierTimelineReportToLogRecords(...)` remains available when you already have a report and want to bridge into Frontier logging sinks without importing `@shapeshift-labs/frontier-logging`.
 
+## Runtime Proof Evidence
+
+For semantic-merge admission, `runFrontierPlaywrightRuntimeProof(...)` wraps the session harness and returns browser evidence plus proof-builder fields. The helper does not import HTML or CSS packages and does not claim semantic equivalence; language validators still decide admission.
+
+```ts
+import {
+  domProbe,
+  runFrontierPlaywrightRuntimeProof,
+  stateProbe
+} from '@shapeshift-labs/frontier-playwright';
+import { createHtmlRuntimeProof } from '@shapeshift-labs/frontier-lang-html';
+
+const run = await runFrontierPlaywrightRuntimeProof(page, {
+  runId: 'html-runtime-proof',
+  state: [stateProbe('app', 'window.appState', { paths: ['/ready'] })],
+  dom: [domProbe('root', '[data-frontier-root]', { include: ['text'] })],
+  command: 'playwright test html-runtime.spec.ts',
+  probeId: 'html:script-runtime-boundary',
+  runtimeSignals: ['html-script-runtime'],
+  queries: [
+    { id: 'ready-state', query: { source: 'state', id: 'app', path: '/ready', changed: true } }
+  ],
+  action: async () => {
+    await page.getByRole('button', { name: 'Run' }).click();
+  },
+  stepOptions: {
+    waitFor: { source: 'state', id: 'app', path: '/ready', changed: true }
+  }
+});
+
+const proof = createHtmlRuntimeProof({
+  sourcePath: 'view.html',
+  reasonCode: 'script-runtime-boundary',
+  side: 'worker',
+  recordKey: 'text#script[1]/#text[1]',
+  base,
+  worker,
+  head,
+  output,
+  ...run.builderFields
+});
+
+console.log(run.runtimeEvidence.runtimeEvidenceBound);
+console.log(proof.browserRuntimeEquivalenceClaim);
+```
+
+`runtimeEvidenceBound` only becomes true for passed runs with command, probe id, evidence hash, and runtime signals. The builder fields keep browser/runtime/cascade/render/semantic/auto-merge claims false until the owning language package admits the proof against exact source bindings.
+
 ## Benchmarks
 
 These are Frontier-only package measurements, not competitor comparisons.

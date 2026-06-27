@@ -18,6 +18,7 @@ import {
   normalizeRuntimeProofSignals,
   queryFrontierTimeline,
   readFrontierTimeline,
+  runFrontierPlaywrightRuntimeProof,
   runFrontierAiStep,
   stateProbe,
   summarizeFrontierTimeline,
@@ -34,6 +35,8 @@ import {
   type FrontierPlaywrightProbe,
   type FrontierPlaywrightRuntimeProofBuilderFields,
   type FrontierPlaywrightRuntimeProofEvidence,
+  type FrontierPlaywrightRuntimeProofRunOptions,
+  type FrontierPlaywrightRuntimeProofRunResult,
   type FrontierPlaywrightSample,
   type FrontierPlaywrightTimelineQueryPlan,
   type FrontierPlaywrightTimelineReport,
@@ -108,6 +111,16 @@ const runtimeProofEvidence: FrontierPlaywrightRuntimeProofEvidence = createFront
 const runtimeProofBuilderFields: FrontierPlaywrightRuntimeProofBuilderFields = createFrontierPlaywrightRuntimeProofBuilderFields(runtimeProofEvidence);
 const runtimeSignals: readonly string[] = normalizeRuntimeProofSignals('html-script-runtime', { 'css-cascade-runtime': true });
 const runtimeEvidenceHash: string = frontierPlaywrightRuntimeEvidenceHash({ report });
+const runtimeProofRunOptions: FrontierPlaywrightRuntimeProofRunOptions<string> = {
+  runId: 'runtime-run',
+  state: [state],
+  command: 'playwright test html-runtime.spec.ts',
+  probeId: 'html:script-runtime-boundary',
+  runtimeSignals: ['html-script-runtime'],
+  queries: plans,
+  action: async () => 'ok'
+};
+const runtimeProofRun: FrontierPlaywrightRuntimeProofRunResult<string> = await runFrontierPlaywrightRuntimeProof(page, runtimeProofRunOptions);
 const jsonl: string = encodeFrontierTimelineJsonl(timeline);
 const decoded: FrontierPlaywrightSample[] = decodeFrontierTimelineJsonl(jsonl);
 const evidence: FrontierPlaywrightEvidenceMatch[] = report.queries[0].matches;
@@ -127,6 +140,7 @@ void runtimeProofEvidence;
 void runtimeProofBuilderFields;
 void runtimeSignals;
 void runtimeEvidenceHash;
+void runtimeProofRun;
 void decoded;
 void evidence;
 void records;

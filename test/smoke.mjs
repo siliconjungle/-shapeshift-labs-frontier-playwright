@@ -16,6 +16,7 @@ import {
   frontierDomDevtoolsProbe,
   normalizeRuntimeProofSignals,
   queryFrontierTimeline,
+  runFrontierPlaywrightRuntimeProof,
   runFrontierAiStep,
   stateProbe,
   summarizeFrontierTimeline
@@ -220,6 +221,35 @@ assert.strictEqual(createFrontierPlaywrightRuntimeProofEvidence({
   runtimeSignals: ['html-script-runtime'],
   report: evidence.report
 }).runtimeEvidenceBound, false);
+
+const runtimePage = new FakePage();
+const runtimeRun = await runFrontierPlaywrightRuntimeProof(runtimePage, {
+  runId: 'runtime-proof-run',
+  state: [stateProbe('app', 'window.appState', { paths: ['/count'] })],
+  dom: [domProbe('actions', 'button[data-action]', { include: ['text'] })],
+  command: 'playwright test html-runtime.spec.ts',
+  probeId: 'html:script-runtime-boundary',
+  runtimeSignals: ['html-script-runtime'],
+  queries: [
+    { id: 'count-runtime', query: { source: 'state', id: 'app', path: '/count', changed: true }, limit: 2 }
+  ],
+  action: async () => {
+    runtimePage.context.appState.count = 7;
+    return 'changed';
+  },
+  stepOptions: {
+    waitFor: { source: 'state', id: 'app', path: '/count', changed: true },
+    timeoutMs: 500,
+    intervalMs: 5
+  }
+});
+assert.strictEqual(runtimeRun.kind, 'frontier.playwright.runtime-proof-run');
+assert.strictEqual(runtimeRun.runId, 'runtime-proof-run');
+assert.strictEqual(runtimeRun.step.value, 'changed');
+assert.strictEqual(runtimeRun.runtimeEvidence.runtimeEvidenceBound, true);
+assert.strictEqual(runtimeRun.runtimeEvidence.browserRuntimeEquivalenceClaim, false);
+assert.strictEqual(runtimeRun.builderFields.runtimeEvidence.evidenceHash, runtimeRun.runtimeEvidence.runtimeEvidenceHash);
+assert.strictEqual(runtimeRun.evidence.report.queries[0].count, 1);
 
 const standaloneEvidence = createFrontierAiEvidence(await ai.timeline(), [
   { id: 'dom', query: { source: 'dom', id: 'actions' }, limit: 1 }
