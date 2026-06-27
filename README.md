@@ -384,6 +384,8 @@ console.log(proof.browserRuntimeEquivalenceClaim);
 
 `runtimeEvidenceBound` only becomes true for passed runs with command, probe id, evidence hash, and runtime signals. The builder fields keep browser/runtime/cascade/render/semantic/auto-merge claims false until the owning language package admits the proof against exact source bindings.
 
+When the proof should be bound to concrete browser assertions, use `runFrontierPlaywrightAssertionRuntimeProof(...)` with `dom-text`, `dom-attribute`, or `computed-style` assertions. Failed assertions return failed runtime evidence instead of a merge-admissible proof.
+
 ## Benchmarks
 
 These are Frontier-only package measurements, not competitor comparisons.

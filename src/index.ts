@@ -398,6 +398,63 @@ export interface FrontierPlaywrightSourceRuntimeProofRunResult<T = unknown> {
   readonly proofBuilderInput: FrontierPlaywrightSourceRuntimeProofBuilderInput;
 }
 
+export type FrontierPlaywrightRuntimeAssertion =
+  | FrontierPlaywrightDomTextAssertion
+  | FrontierPlaywrightDomAttributeAssertion
+  | FrontierPlaywrightComputedStyleAssertion;
+
+export interface FrontierPlaywrightRuntimeAssertionBase {
+  readonly id?: string;
+  readonly selector: string;
+  readonly expected?: string | number | boolean | null;
+  readonly includes?: string;
+}
+
+export interface FrontierPlaywrightDomTextAssertion extends FrontierPlaywrightRuntimeAssertionBase {
+  readonly kind: 'dom-text';
+}
+
+export interface FrontierPlaywrightDomAttributeAssertion extends FrontierPlaywrightRuntimeAssertionBase {
+  readonly kind: 'dom-attribute';
+  readonly attribute: string;
+}
+
+export interface FrontierPlaywrightComputedStyleAssertion extends FrontierPlaywrightRuntimeAssertionBase {
+  readonly kind: 'computed-style';
+  readonly property: string;
+  readonly pseudoElement?: string;
+}
+
+export interface FrontierPlaywrightRuntimeAssertionResult {
+  readonly id: string;
+  readonly kind: FrontierPlaywrightRuntimeAssertion['kind'];
+  readonly status: 'passed' | 'failed';
+  readonly selector: string;
+  readonly property?: string;
+  readonly attribute?: string;
+  readonly expected?: FrontierPlaywrightJsonValue;
+  readonly includes?: string;
+  readonly actual?: FrontierPlaywrightJsonValue;
+  readonly message?: string;
+}
+
+export interface FrontierPlaywrightAssertionRuntimeProofRunOptions<T = unknown> extends FrontierPlaywrightSourceRuntimeProofRunOptions<T> {
+  readonly assertions?: readonly FrontierPlaywrightRuntimeAssertion[];
+}
+
+export interface FrontierPlaywrightAssertionRuntimeProofRunResult<T = unknown> {
+  readonly kind: 'frontier.playwright.assertion-runtime-proof-run';
+  readonly version: 1;
+  readonly id: string;
+  readonly runId: string;
+  readonly step?: FrontierPlaywrightAiStepResult<Awaited<T>>;
+  readonly evidence: FrontierPlaywrightAiEvidence;
+  readonly runtimeEvidence: FrontierPlaywrightRuntimeProofEvidence;
+  readonly builderFields: FrontierPlaywrightRuntimeProofBuilderFields;
+  readonly proofBuilderInput: FrontierPlaywrightSourceRuntimeProofBuilderInput;
+  readonly assertions: readonly FrontierPlaywrightRuntimeAssertionResult[];
+}
+
 export interface FrontierPlaywrightLogRecord {
   level: 'info';
   message: string;
@@ -697,6 +754,109 @@ export async function runFrontierPlaywrightSourceRuntimeProof<T = unknown>(
       ...runtimeRun.builderFields
     })
   };
+}
+
+export async function runFrontierPlaywrightAssertionRuntimeProof<T = unknown>(
+  page: FrontierPlaywrightPageLike,
+  options: FrontierPlaywrightAssertionRuntimeProofRunOptions<T>
+): Promise<FrontierPlaywrightAssertionRuntimeProofRunResult<T>> {
+  const { assertions = [], action, stepOptions, metadata, ...sourceOptions } = options;
+  let assertionResults: readonly FrontierPlaywrightRuntimeAssertionResult[] = [];
+  const sourceRun = await runFrontierPlaywrightSourceRuntimeProof(page, {
+    ...sourceOptions,
+    metadata: {
+      ...(metadata ?? {}),
+      assertionCount: assertions.length
+    },
+    stepOptions: {
+      captureErrors: true,
+      ...stepOptions
+    },
+    action: async (session) => {
+      const value = action ? await action(session) : undefined;
+      assertionResults = await evaluateFrontierPlaywrightRuntimeAssertions(page, assertions);
+      const failed = assertionResults.filter((result) => result.status === 'failed');
+      if (failed.length) {
+        throw new Error('Frontier Playwright runtime assertions failed: ' + failed.map((result) => result.id).join(', '));
+      }
+      return value as T;
+    }
+  });
+  return {
+    kind: 'frontier.playwright.assertion-runtime-proof-run',
+    version: 1,
+    id: sourceRun.id,
+    runId: sourceRun.runId,
+    step: sourceRun.step,
+    evidence: sourceRun.evidence,
+    runtimeEvidence: sourceRun.runtimeEvidence,
+    builderFields: sourceRun.builderFields,
+    proofBuilderInput: sourceRun.proofBuilderInput,
+    assertions: assertionResults
+  };
+}
+
+export async function evaluateFrontierPlaywrightRuntimeAssertions(
+  page: FrontierPlaywrightPageLike,
+  assertions: readonly FrontierPlaywrightRuntimeAssertion[]
+): Promise<FrontierPlaywrightRuntimeAssertionResult[]> {
+  return page.evaluate((items) => {
+    return (items as FrontierPlaywrightRuntimeAssertion[]).map((assertion, index) => {
+      const id = assertion.id ?? assertion.kind + '-' + (index + 1);
+      const element = queryRuntimeAssertionElement(assertion.selector);
+      if (!element) {
+        return {
+          id,
+          kind: assertion.kind,
+          status: 'failed',
+          selector: assertion.selector,
+          expected: assertion.expected,
+          includes: assertion.includes,
+          message: 'Element not found for selector: ' + assertion.selector
+        };
+      }
+      let actual: unknown;
+      let property: string | undefined;
+      let attribute: string | undefined;
+      if (assertion.kind === 'dom-text') {
+        actual = element.textContent ?? '';
+      } else if (assertion.kind === 'dom-attribute') {
+        attribute = assertion.attribute;
+        actual = element.getAttribute(assertion.attribute);
+      } else {
+        property = assertion.property;
+        const style = globalThis.getComputedStyle?.(element, assertion.pseudoElement);
+        actual = style?.getPropertyValue(assertion.property) ?? (style as any)?.[assertion.property];
+      }
+      const status = runtimeAssertionMatches(actual, assertion) ? 'passed' : 'failed';
+      return {
+        id,
+        kind: assertion.kind,
+        status,
+        selector: assertion.selector,
+        property,
+        attribute,
+        expected: assertion.expected,
+        includes: assertion.includes,
+        actual: actual === undefined ? null : String(actual),
+        message: status === 'passed' ? undefined : 'Runtime assertion did not match'
+      };
+    });
+
+    function runtimeAssertionMatches(actual: unknown, assertion: FrontierPlaywrightRuntimeAssertion): boolean {
+      if (assertion.expected !== undefined && String(actual) !== String(assertion.expected)) return false;
+      if (assertion.includes !== undefined && !String(actual ?? '').includes(assertion.includes)) return false;
+      return assertion.expected !== undefined || assertion.includes !== undefined ? true : actual !== undefined && actual !== null;
+    }
+
+    function queryRuntimeAssertionElement(selector: string): any {
+      const documentLike = globalThis.document as any;
+      if (!documentLike) return undefined;
+      if (typeof documentLike.querySelector === 'function') return documentLike.querySelector(selector);
+      if (typeof documentLike.querySelectorAll === 'function') return documentLike.querySelectorAll(selector)?.[0];
+      return undefined;
+    }
+  }, assertions) as Promise<FrontierPlaywrightRuntimeAssertionResult[]>;
 }
 
 export function queryFrontierTimeline(

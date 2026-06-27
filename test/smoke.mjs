@@ -16,6 +16,7 @@ import {
   frontierDomDevtoolsProbe,
   normalizeRuntimeProofSignals,
   queryFrontierTimeline,
+  runFrontierPlaywrightAssertionRuntimeProof,
   runFrontierPlaywrightRuntimeProof,
   runFrontierPlaywrightSourceRuntimeProof,
   runFrontierAiStep,
@@ -51,6 +52,9 @@ class FakePage {
           summary: { patchCount: this.context.appState.count }
         })
       },
+      getComputedStyle: () => ({
+        getPropertyValue: (name) => name === 'color' ? 'rgb(255, 0, 0)' : ''
+      }),
       setTimeout,
       Date,
       Array,
@@ -284,6 +288,54 @@ assert.strictEqual(sourceRuntimeRun.proofBuilderInput.sourcePath, 'view.html');
 assert.strictEqual(sourceRuntimeRun.proofBuilderInput.reasonCode, 'script-runtime-boundary');
 assert.strictEqual(sourceRuntimeRun.proofBuilderInput.baseSourceText, sourceRuntimeRun.proofBuilderInput.base);
 assert.strictEqual(sourceRuntimeRun.proofBuilderInput.runtimeEvidence.evidenceHash, sourceRuntimeRun.runtimeEvidence.runtimeEvidenceHash);
+
+const assertionRuntimePage = new FakePage();
+const assertionRuntimeRun = await runFrontierPlaywrightAssertionRuntimeProof(assertionRuntimePage, {
+  runId: 'assertion-runtime-proof-run',
+  sourcePath: 'button.css',
+  reasonCode: 'css-atrule-new-scope-unsupported',
+  side: 'worker',
+  shapeKey: 'at-rule:media::(min-width: 700px)',
+  base: '.button { color: red; }\n',
+  worker: '@media (min-width: 700px) { .button { color: red; } }\n',
+  head: '.button { color: red; }\n',
+  output: '@media (min-width: 700px) {\n  .button {\n    color: red;\n  }\n}\n',
+  state: [stateProbe('app', 'window.appState', { paths: ['/count'] })],
+  command: 'playwright test css-cascade-runtime.spec.ts',
+  probeId: 'css:button:media-cascade',
+  runtimeSignals: ['css-cascade-runtime'],
+  assertions: [
+    { id: 'button-text', kind: 'dom-text', selector: 'button[data-action]', includes: 'Save' },
+    { id: 'button-color', kind: 'computed-style', selector: 'button[data-action]', property: 'color', expected: 'rgb(255, 0, 0)' }
+  ],
+  action: async () => {
+    assertionRuntimePage.context.appState.count = 9;
+  },
+  stepOptions: {
+    waitFor: { source: 'state', id: 'app', path: '/count', changed: true },
+    timeoutMs: 500,
+    intervalMs: 5
+  }
+});
+assert.strictEqual(assertionRuntimeRun.kind, 'frontier.playwright.assertion-runtime-proof-run');
+assert.strictEqual(assertionRuntimeRun.assertions.length, 2);
+assert.strictEqual(assertionRuntimeRun.assertions.every((item) => item.status === 'passed'), true);
+assert.strictEqual(assertionRuntimeRun.runtimeEvidence.runtimeEvidenceBound, true);
+assert.strictEqual(assertionRuntimeRun.proofBuilderInput.shapeKey, 'at-rule:media::(min-width: 700px)');
+
+const failedAssertionRun = await runFrontierPlaywrightAssertionRuntimeProof(new FakePage(), {
+  runId: 'assertion-runtime-proof-failed-run',
+  command: 'playwright test css-cascade-runtime.spec.ts',
+  probeId: 'css:button:media-cascade',
+  runtimeSignals: ['css-cascade-runtime'],
+  assertions: [
+    { id: 'button-color-blue', kind: 'computed-style', selector: 'button[data-action]', property: 'color', expected: 'blue' }
+  ],
+  action: async () => {}
+});
+assert.strictEqual(failedAssertionRun.assertions[0].status, 'failed');
+assert.strictEqual(failedAssertionRun.step.error.message.includes('runtime assertions failed'), true);
+assert.strictEqual(failedAssertionRun.runtimeEvidence.runtimeEvidenceBound, false);
 
 const standaloneEvidence = createFrontierAiEvidence(await ai.timeline(), [
   { id: 'dom', query: { source: 'dom', id: 'actions' }, limit: 1 }

@@ -18,6 +18,7 @@ import {
   normalizeRuntimeProofSignals,
   queryFrontierTimeline,
   readFrontierTimeline,
+  runFrontierPlaywrightAssertionRuntimeProof,
   runFrontierPlaywrightRuntimeProof,
   runFrontierPlaywrightSourceRuntimeProof,
   runFrontierAiStep,
@@ -28,12 +29,16 @@ import {
   type FrontierPlaywrightAiEvidenceOptions,
   type FrontierPlaywrightAiSession,
   type FrontierPlaywrightAiStepResult,
+  type FrontierPlaywrightAssertionRuntimeProofRunOptions,
+  type FrontierPlaywrightAssertionRuntimeProofRunResult,
   type FrontierPlaywrightDomProbe,
   type FrontierPlaywrightEvidenceMatch,
   type FrontierPlaywrightInstallOptions,
   type FrontierPlaywrightLogRecord,
   type FrontierPlaywrightPageLike,
   type FrontierPlaywrightProbe,
+  type FrontierPlaywrightRuntimeAssertion,
+  type FrontierPlaywrightRuntimeAssertionResult,
   type FrontierPlaywrightRuntimeProofBuilderFields,
   type FrontierPlaywrightRuntimeProofEvidence,
   type FrontierPlaywrightRuntimeProofRunOptions,
@@ -138,6 +143,16 @@ const sourceRuntimeProofRunOptions: FrontierPlaywrightSourceRuntimeProofRunOptio
 };
 const sourceRuntimeProofRun: FrontierPlaywrightSourceRuntimeProofRunResult<string> = await runFrontierPlaywrightSourceRuntimeProof(page, sourceRuntimeProofRunOptions);
 const sourceRuntimeProofBuilderInput: FrontierPlaywrightSourceRuntimeProofBuilderInput = sourceRuntimeProofRun.proofBuilderInput;
+const runtimeAssertions: readonly FrontierPlaywrightRuntimeAssertion[] = [
+  { id: 'button-text', kind: 'dom-text', selector: 'button[data-action]', includes: 'Save' },
+  { id: 'button-color', kind: 'computed-style', selector: 'button[data-action]', property: 'color', expected: 'red' }
+];
+const assertionRuntimeProofRunOptions: FrontierPlaywrightAssertionRuntimeProofRunOptions<string> = {
+  ...sourceRuntimeProofRunOptions,
+  assertions: runtimeAssertions
+};
+const assertionRuntimeProofRun: FrontierPlaywrightAssertionRuntimeProofRunResult<string> = await runFrontierPlaywrightAssertionRuntimeProof(page, assertionRuntimeProofRunOptions);
+const assertionResults: readonly FrontierPlaywrightRuntimeAssertionResult[] = assertionRuntimeProofRun.assertions;
 const jsonl: string = encodeFrontierTimelineJsonl(timeline);
 const decoded: FrontierPlaywrightSample[] = decodeFrontierTimelineJsonl(jsonl);
 const evidence: FrontierPlaywrightEvidenceMatch[] = report.queries[0].matches;
@@ -160,6 +175,8 @@ void runtimeEvidenceHash;
 void runtimeProofRun;
 void sourceRuntimeProofRun;
 void sourceRuntimeProofBuilderInput;
+void assertionRuntimeProofRun;
+void assertionResults;
 void decoded;
 void evidence;
 void records;
