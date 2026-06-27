@@ -4,6 +4,7 @@ import {
   collectFrontierSnapshot,
   createFrontierAiSession,
   createFrontierAiEvidence,
+  createFrontierPlaywrightRuntimeProofArtifact,
   createFrontierPlaywrightRuntimeProofBuilderFields,
   createFrontierPlaywrightRuntimeProofEvidence,
   createFrontierTimelineReport,
@@ -13,6 +14,7 @@ import {
   encodeFrontierTimelineJsonl,
   frontierTimelineReportToLogRecords,
   frontierPlaywrightRuntimeEvidenceHash,
+  frontierPlaywrightSourceTextHash,
   frontierDomDevtoolsProbe,
   normalizeRuntimeProofSignals,
   queryFrontierTimeline,
@@ -20,6 +22,7 @@ import {
   runFrontierPlaywrightRuntimeProof,
   runFrontierPlaywrightSourceRuntimeProof,
   runFrontierAiStep,
+  stringifyFrontierPlaywrightRuntimeProofArtifact,
   stateProbe,
   summarizeFrontierTimeline
 } from '../dist/index.js';
@@ -322,6 +325,25 @@ assert.strictEqual(assertionRuntimeRun.assertions.length, 2);
 assert.strictEqual(assertionRuntimeRun.assertions.every((item) => item.status === 'passed'), true);
 assert.strictEqual(assertionRuntimeRun.runtimeEvidence.runtimeEvidenceBound, true);
 assert.strictEqual(assertionRuntimeRun.proofBuilderInput.shapeKey, 'at-rule:media::(min-width: 700px)');
+const assertionArtifact = createFrontierPlaywrightRuntimeProofArtifact(assertionRuntimeRun, {
+  id: 'assertion-runtime-proof-artifact',
+  generatedAt: 123,
+  metadata: { sourceJobId: 'html-css-worker' }
+});
+assert.strictEqual(assertionArtifact.kind, 'frontier.playwright.runtime-proof-artifact');
+assert.strictEqual(assertionArtifact.id, 'assertion-runtime-proof-artifact');
+assert.strictEqual(assertionArtifact.status, 'passed');
+assert.strictEqual(assertionArtifact.runKind, 'frontier.playwright.assertion-runtime-proof-run');
+assert.strictEqual(assertionArtifact.proofBuilderInput.shapeKey, assertionRuntimeRun.proofBuilderInput.shapeKey);
+assert.strictEqual(assertionArtifact.assertions.length, 2);
+assert.strictEqual(assertionArtifact.sourceTextHashes.worker, frontierPlaywrightSourceTextHash({
+  sourcePath: 'button.css',
+  side: 'worker',
+  text: assertionRuntimeRun.proofBuilderInput.workerSourceText
+}));
+assert.strictEqual(assertionArtifact.browserRuntimeEquivalenceClaim, false);
+assert.strictEqual(assertionArtifact.semanticEquivalenceClaim, false);
+assert.match(stringifyFrontierPlaywrightRuntimeProofArtifact(assertionArtifact), /frontier\.playwright\.runtime-proof-artifact/);
 
 const failedAssertionRun = await runFrontierPlaywrightAssertionRuntimeProof(new FakePage(), {
   runId: 'assertion-runtime-proof-failed-run',
@@ -336,6 +358,10 @@ const failedAssertionRun = await runFrontierPlaywrightAssertionRuntimeProof(new 
 assert.strictEqual(failedAssertionRun.assertions[0].status, 'failed');
 assert.strictEqual(failedAssertionRun.step.error.message.includes('runtime assertions failed'), true);
 assert.strictEqual(failedAssertionRun.runtimeEvidence.runtimeEvidenceBound, false);
+const failedAssertionArtifact = createFrontierPlaywrightRuntimeProofArtifact(failedAssertionRun, { includeEvidence: false });
+assert.strictEqual(failedAssertionArtifact.status, 'failed');
+assert.strictEqual(failedAssertionArtifact.runtimeEvidenceBound, false);
+assert.strictEqual(failedAssertionArtifact.evidence, undefined);
 
 const standaloneEvidence = createFrontierAiEvidence(await ai.timeline(), [
   { id: 'dom', query: { source: 'dom', id: 'actions' }, limit: 1 }

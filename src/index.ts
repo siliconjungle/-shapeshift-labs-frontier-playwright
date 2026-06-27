@@ -455,6 +455,44 @@ export interface FrontierPlaywrightAssertionRuntimeProofRunResult<T = unknown> {
   readonly assertions: readonly FrontierPlaywrightRuntimeAssertionResult[];
 }
 
+export type FrontierPlaywrightRuntimeProofRunLike<T = unknown> =
+  | FrontierPlaywrightRuntimeProofRunResult<T>
+  | FrontierPlaywrightSourceRuntimeProofRunResult<T>
+  | FrontierPlaywrightAssertionRuntimeProofRunResult<T>;
+
+export interface FrontierPlaywrightRuntimeProofArtifactOptions {
+  readonly id?: string;
+  readonly generatedAt?: number;
+  readonly includeEvidence?: boolean;
+  readonly includeStep?: boolean;
+  readonly metadata?: Readonly<Record<string, unknown>>;
+}
+
+export interface FrontierPlaywrightRuntimeProofArtifact {
+  readonly kind: 'frontier.playwright.runtime-proof-artifact';
+  readonly version: 1;
+  readonly id: string;
+  readonly generatedAt: number;
+  readonly status: 'passed' | 'failed';
+  readonly runKind: FrontierPlaywrightRuntimeProofRunLike['kind'];
+  readonly runId: string;
+  readonly proofRunId: string;
+  readonly runtimeEvidence: FrontierPlaywrightRuntimeProofEvidence;
+  readonly builderFields: FrontierPlaywrightRuntimeProofBuilderFields;
+  readonly proofBuilderInput?: FrontierPlaywrightSourceRuntimeProofBuilderInput;
+  readonly sourceTextHashes?: Readonly<Record<string, string>>;
+  readonly assertions?: readonly FrontierPlaywrightRuntimeAssertionResult[];
+  readonly evidence?: FrontierPlaywrightAiEvidence;
+  readonly step?: FrontierPlaywrightAiStepResult<unknown>;
+  readonly runtimeEvidenceBound: boolean;
+  readonly browserRuntimeEquivalenceClaim: false;
+  readonly browserCascadeEquivalenceClaim: false;
+  readonly browserRenderEquivalenceClaim: false;
+  readonly semanticEquivalenceClaim: false;
+  readonly autoMergeClaim: false;
+  readonly metadata?: Readonly<Record<string, unknown>>;
+}
+
 export interface FrontierPlaywrightLogRecord {
   level: 'info';
   message: string;
@@ -794,6 +832,66 @@ export async function runFrontierPlaywrightAssertionRuntimeProof<T = unknown>(
     proofBuilderInput: sourceRun.proofBuilderInput,
     assertions: assertionResults
   };
+}
+
+export function createFrontierPlaywrightRuntimeProofArtifact<T = unknown>(
+  run: FrontierPlaywrightRuntimeProofRunLike<T>,
+  options: FrontierPlaywrightRuntimeProofArtifactOptions = {}
+): FrontierPlaywrightRuntimeProofArtifact {
+  const proofBuilderInput = proofBuilderInputFromRun(run);
+  const assertions = assertionsFromRun(run);
+  const failedAssertion = assertions.some((assertion) => assertion.status === 'failed');
+  const failedStep = Boolean((run.step as { error?: unknown } | undefined)?.error);
+  const passed = run.runtimeEvidence.runtimeEvidenceBound && !failedAssertion && !failedStep;
+  const sourceTextHashes = sourceTextHashesFromProofBuilderInput(proofBuilderInput);
+  return compactRuntimeProofArtifact({
+    kind: 'frontier.playwright.runtime-proof-artifact',
+    version: 1,
+    id: options.id ?? `${run.id}:artifact`,
+    generatedAt: options.generatedAt ?? Date.now(),
+    status: passed ? 'passed' : 'failed',
+    runKind: run.kind,
+    runId: run.runId,
+    proofRunId: run.id,
+    runtimeEvidence: run.runtimeEvidence,
+    builderFields: run.builderFields,
+    proofBuilderInput,
+    sourceTextHashes,
+    assertions: assertions.length ? assertions : undefined,
+    evidence: options.includeEvidence === false ? undefined : run.evidence,
+    step: options.includeStep === false ? undefined : run.step as FrontierPlaywrightAiStepResult<unknown> | undefined,
+    runtimeEvidenceBound: run.runtimeEvidence.runtimeEvidenceBound,
+    browserRuntimeEquivalenceClaim: false,
+    browserCascadeEquivalenceClaim: false,
+    browserRenderEquivalenceClaim: false,
+    semanticEquivalenceClaim: false,
+    autoMergeClaim: false,
+    metadata: compactRuntimeProofRunMetadata({
+      ...(options.metadata ?? {}),
+      assertionCount: assertions.length,
+      failedAssertionCount: assertions.filter((assertion) => assertion.status === 'failed').length,
+      sourceTextHashCount: Object.keys(sourceTextHashes ?? {}).length
+    })
+  });
+}
+
+export function stringifyFrontierPlaywrightRuntimeProofArtifact(
+  artifact: FrontierPlaywrightRuntimeProofArtifact
+): string {
+  return JSON.stringify(artifact, null, 2) + '\n';
+}
+
+export function frontierPlaywrightSourceTextHash(input: {
+  readonly sourcePath?: string;
+  readonly side: string;
+  readonly text: string;
+}): string {
+  return fnv1a32Hash(stableJson({
+    kind: 'frontier.playwright.source-text.hash.v1',
+    sourcePath: input.sourcePath,
+    side: input.side,
+    text: input.text
+  }));
 }
 
 export async function evaluateFrontierPlaywrightRuntimeAssertions(
@@ -1460,6 +1558,15 @@ function stableJson(value: unknown): string {
   return '{' + Object.keys(record).sort().map((key) => JSON.stringify(key) + ':' + stableJson(record[key])).join(',') + '}';
 }
 
+function fnv1a32Hash(text: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return 'fnv1a32:' + hash.toString(16).padStart(8, '0');
+}
+
 interface RedactionContext {
   active: boolean;
   redacted: Set<string>;
@@ -1574,6 +1681,38 @@ function compactSourceRuntimeProofBuilderInput(input: FrontierPlaywrightSourceRu
     if (value !== undefined) out[key] = value;
   }
   return out as unknown as FrontierPlaywrightSourceRuntimeProofBuilderInput;
+}
+
+function compactRuntimeProofArtifact(input: FrontierPlaywrightRuntimeProofArtifact): FrontierPlaywrightRuntimeProofArtifact {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (value !== undefined) out[key] = value;
+  }
+  return out as unknown as FrontierPlaywrightRuntimeProofArtifact;
+}
+
+function proofBuilderInputFromRun(run: FrontierPlaywrightRuntimeProofRunLike): FrontierPlaywrightSourceRuntimeProofBuilderInput | undefined {
+  return 'proofBuilderInput' in run ? run.proofBuilderInput : undefined;
+}
+
+function assertionsFromRun(run: FrontierPlaywrightRuntimeProofRunLike): readonly FrontierPlaywrightRuntimeAssertionResult[] {
+  return 'assertions' in run ? run.assertions : [];
+}
+
+function sourceTextHashesFromProofBuilderInput(
+  input: FrontierPlaywrightSourceRuntimeProofBuilderInput | undefined
+): Readonly<Record<string, string>> | undefined {
+  if (!input) return undefined;
+  const entries: Array<[string, string]> = [];
+  for (const [side, text] of [
+    ['base', input.baseSourceText ?? input.base],
+    ['worker', input.workerSourceText ?? input.worker],
+    ['head', input.headSourceText ?? input.head],
+    ['output', input.outputSourceText ?? input.output]
+  ] as const) {
+    if (typeof text === 'string') entries.push([side, frontierPlaywrightSourceTextHash({ sourcePath: input.sourcePath, side, text })]);
+  }
+  return entries.length ? Object.fromEntries(entries) : undefined;
 }
 
 function firstOptionalString(...values: readonly unknown[]): string | undefined {

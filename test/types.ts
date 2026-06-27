@@ -3,6 +3,7 @@ import {
   createFrontierAiEvidence,
   configureFrontierPlaywright,
   createFrontierAiSession,
+  createFrontierPlaywrightRuntimeProofArtifact,
   createFrontierPlaywrightRuntimeProofBuilderFields,
   createFrontierPlaywrightRuntimeProofEvidence,
   createFrontierTimelineReport,
@@ -12,6 +13,7 @@ import {
   encodeFrontierTimelineJsonl,
   frontierDomDevtoolsProbe,
   frontierPlaywrightRuntimeEvidenceHash,
+  frontierPlaywrightSourceTextHash,
   frontierTimelineReportToLogRecords,
   installFrontierPlaywrightProbe,
   markFrontierTimeline,
@@ -23,6 +25,7 @@ import {
   runFrontierPlaywrightSourceRuntimeProof,
   runFrontierAiStep,
   stateProbe,
+  stringifyFrontierPlaywrightRuntimeProofArtifact,
   summarizeFrontierTimeline,
   waitForFrontierTimeline,
   type FrontierPlaywrightAiEvidence,
@@ -39,6 +42,8 @@ import {
   type FrontierPlaywrightProbe,
   type FrontierPlaywrightRuntimeAssertion,
   type FrontierPlaywrightRuntimeAssertionResult,
+  type FrontierPlaywrightRuntimeProofArtifact,
+  type FrontierPlaywrightRuntimeProofArtifactOptions,
   type FrontierPlaywrightRuntimeProofBuilderFields,
   type FrontierPlaywrightRuntimeProofEvidence,
   type FrontierPlaywrightRuntimeProofRunOptions,
@@ -153,6 +158,10 @@ const assertionRuntimeProofRunOptions: FrontierPlaywrightAssertionRuntimeProofRu
 };
 const assertionRuntimeProofRun: FrontierPlaywrightAssertionRuntimeProofRunResult<string> = await runFrontierPlaywrightAssertionRuntimeProof(page, assertionRuntimeProofRunOptions);
 const assertionResults: readonly FrontierPlaywrightRuntimeAssertionResult[] = assertionRuntimeProofRun.assertions;
+const runtimeProofArtifactOptions: FrontierPlaywrightRuntimeProofArtifactOptions = { id: 'runtime-proof-artifact', includeEvidence: true };
+const runtimeProofArtifact: FrontierPlaywrightRuntimeProofArtifact = createFrontierPlaywrightRuntimeProofArtifact(assertionRuntimeProofRun, runtimeProofArtifactOptions);
+const runtimeProofArtifactJson: string = stringifyFrontierPlaywrightRuntimeProofArtifact(runtimeProofArtifact);
+const sourceTextHash: string = frontierPlaywrightSourceTextHash({ sourcePath: 'view.html', side: 'worker', text: '<div />' });
 const jsonl: string = encodeFrontierTimelineJsonl(timeline);
 const decoded: FrontierPlaywrightSample[] = decodeFrontierTimelineJsonl(jsonl);
 const evidence: FrontierPlaywrightEvidenceMatch[] = report.queries[0].matches;
@@ -177,6 +186,9 @@ void sourceRuntimeProofRun;
 void sourceRuntimeProofBuilderInput;
 void assertionRuntimeProofRun;
 void assertionResults;
+void runtimeProofArtifact;
+void runtimeProofArtifactJson;
+void sourceTextHash;
 void decoded;
 void evidence;
 void records;

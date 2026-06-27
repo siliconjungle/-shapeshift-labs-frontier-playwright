@@ -344,8 +344,10 @@ For semantic-merge admission, `runFrontierPlaywrightRuntimeProof(...)` wraps the
 
 ```ts
 import {
+  createFrontierPlaywrightRuntimeProofArtifact,
   domProbe,
   runFrontierPlaywrightSourceRuntimeProof,
+  stringifyFrontierPlaywrightRuntimeProofArtifact,
   stateProbe
 } from '@shapeshift-labs/frontier-playwright';
 import { createHtmlRuntimeProof } from '@shapeshift-labs/frontier-lang-html';
@@ -377,9 +379,11 @@ const run = await runFrontierPlaywrightSourceRuntimeProof(page, {
 });
 
 const proof = createHtmlRuntimeProof(run.proofBuilderInput);
+const artifact = createFrontierPlaywrightRuntimeProofArtifact(run);
 
 console.log(run.runtimeEvidence.runtimeEvidenceBound);
 console.log(proof.browserRuntimeEquivalenceClaim);
+console.log(stringifyFrontierPlaywrightRuntimeProofArtifact(artifact));
 ```
 
 `runtimeEvidenceBound` only becomes true for passed runs with command, probe id, evidence hash, and runtime signals. The builder fields keep browser/runtime/cascade/render/semantic/auto-merge claims false until the owning language package admits the proof against exact source bindings.
