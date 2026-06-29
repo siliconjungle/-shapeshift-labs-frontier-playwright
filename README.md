@@ -28,6 +28,7 @@ The published Frontier package family is generated from one shared package catal
 - [`@shapeshift-labs/frontier-run`](https://www.npmjs.com/package/@shapeshift-labs/frontier-run): Append-only distributed run graphs, causal event DAGs, evidence nodes, lanes, leases, refs, segments, dashboard projections, and admission decision records for Frontier agent work.
 - [`@shapeshift-labs/frontier-lease`](https://www.npmjs.com/package/@shapeshift-labs/frontier-lease): Runtime-neutral semantic, file, package, and repository lease claims with fencing tokens, expiry, conflict checks, apply validation, and replayable evidence for Frontier collaboration.
 - [`@shapeshift-labs/frontier-inspect`](https://www.npmjs.com/package/@shapeshift-labs/frontier-inspect): Cross-package inspection/evidence bundles, registry graph snapshots, feature/resource impact reports, timeline/event normalization, redaction, JSONL import/export, and AI-readable app feature maps.
+- [`@shapeshift-labs/frontier-runtime-proof`](https://www.npmjs.com/package/@shapeshift-labs/frontier-runtime-proof): Runtime-neutral proof capsules, source-bound runtime telemetry, and admission evidence helpers for Frontier merge and review workflows.
 - [`@shapeshift-labs/frontier-scheduler`](https://www.npmjs.com/package/@shapeshift-labs/frontier-scheduler): Deterministic work scheduling, lanes, cancellation, backpressure, frame policies, replay snapshots, and work graphs.
 - [`@shapeshift-labs/frontier-logging`](https://www.npmjs.com/package/@shapeshift-labs/frontier-logging): Opt-in structured logging, browser telemetry, scheduled sinks, file sinks, exporters, benchmark traces, and Frontier patch/update summaries.
 - [`@shapeshift-labs/frontier-mutation`](https://www.npmjs.com/package/@shapeshift-labs/frontier-mutation): Explicit mutation and selector plans compiled to Frontier patches or CRDT operations.
@@ -127,6 +128,7 @@ Package source repositories:
 - [`siliconjungle/-shapeshift-labs-frontier-run`](https://github.com/siliconjungle/-shapeshift-labs-frontier-run)
 - [`siliconjungle/-shapeshift-labs-frontier-lease`](https://github.com/siliconjungle/-shapeshift-labs-frontier-lease)
 - [`siliconjungle/-shapeshift-labs-frontier-inspect`](https://github.com/siliconjungle/-shapeshift-labs-frontier-inspect)
+- [`siliconjungle/-shapeshift-labs-frontier-runtime-proof`](https://github.com/siliconjungle/-shapeshift-labs-frontier-runtime-proof)
 - [`siliconjungle/-shapeshift-labs-frontier-scheduler`](https://github.com/siliconjungle/-shapeshift-labs-frontier-scheduler)
 - [`siliconjungle/-shapeshift-labs-frontier-logging`](https://github.com/siliconjungle/-shapeshift-labs-frontier-logging)
 - [`siliconjungle/-shapeshift-labs-frontier-mutation`](https://github.com/siliconjungle/-shapeshift-labs-frontier-mutation)
@@ -222,6 +224,7 @@ import { test } from '@playwright/test';
 import {
   createFrontierPlaywrightProbe,
   domProbe,
+  frontierDomRegistryProbe,
   frontierDomDevtoolsProbe,
   stateProbe
 } from '@shapeshift-labs/frontier-playwright';
@@ -243,6 +246,9 @@ test('state and DOM stay in sync', async ({ page }) => {
       frontierDomDevtoolsProbe('dom', '__FRONTIER_DOM__', {
         includeStateSnapshot: true
       })
+    ],
+    registry: [
+      frontierDomRegistryProbe('registry', '__FRONTIER_DOM__')
     ]
   });
 
@@ -263,6 +269,21 @@ test('state and DOM stay in sync', async ({ page }) => {
     id: 'dom',
     changed: true
   });
+
+  const actionEdges = await frontier.query({
+    source: 'registry',
+    id: 'registry',
+    registryEntryId: 'todo.toggle',
+    feature: 'todos'
+  });
+
+  const featureSurface = await frontier.query({
+    source: 'registry',
+    registryPackage: '@app/todos',
+    registryTag: 'mutation',
+    registryFile: 'src/features/todos/actions.ts',
+    registryTouches: 'route:/todos'
+  });
 });
 ```
 
@@ -271,6 +292,7 @@ The browser-side probe stores a bounded timeline in `window.__FRONTIER_PLAYWRIGH
 - state via `expression`, `globalName`, and JSON Pointer paths
 - DOM via selectors, text, attributes, dataset, value, checked state, geometry, and selected properties
 - Frontier DOM devtools via `snapshot()` or `inspect()` globals such as `__FRONTIER_DOM__`
+- Frontier registry graphs directly or through DOM devtools snapshots, with entry filters for feature, package, tag, source file, and touched route/resource nodes
 - explicit marks for AI/test-script milestones
 
 Timeline queries run in Node, so AI scripts can ask for "what changed at `/todos/0/done` after the click" without writing page-specific diff code.
@@ -337,58 +359,6 @@ await writeLogs(evidence.logRecords);
 ```
 
 The harness intentionally returns plain JSON-shaped evidence. `frontier.evidence(...)` reads the browser timeline once, then produces the report, optional JSONL export, and optional structural log records from that same snapshot. `frontierTimelineReportToLogRecords(...)` remains available when you already have a report and want to bridge into Frontier logging sinks without importing `@shapeshift-labs/frontier-logging`.
-
-## Runtime Proof Evidence
-
-For semantic-merge admission, `runFrontierPlaywrightRuntimeProof(...)` wraps the session harness and returns browser evidence plus proof-builder fields. The helper does not import HTML or CSS packages and does not claim semantic equivalence; language validators still decide admission.
-
-```ts
-import {
-  createFrontierPlaywrightRuntimeProofArtifact,
-  domProbe,
-  runFrontierPlaywrightSourceRuntimeProof,
-  stringifyFrontierPlaywrightRuntimeProofArtifact,
-  stateProbe
-} from '@shapeshift-labs/frontier-playwright';
-import { createHtmlRuntimeProof } from '@shapeshift-labs/frontier-lang-html';
-
-const run = await runFrontierPlaywrightSourceRuntimeProof(page, {
-  runId: 'html-runtime-proof',
-  sourcePath: 'view.html',
-  reasonCode: 'script-runtime-boundary',
-  side: 'worker',
-  recordKey: 'text#script[1]/#text[1]',
-  base,
-  worker,
-  head,
-  output,
-  state: [stateProbe('app', 'window.appState', { paths: ['/ready'] })],
-  dom: [domProbe('root', '[data-frontier-root]', { include: ['text'] })],
-  command: 'playwright test html-runtime.spec.ts',
-  probeId: 'html:script-runtime-boundary',
-  runtimeSignals: ['html-script-runtime'],
-  queries: [
-    { id: 'ready-state', query: { source: 'state', id: 'app', path: '/ready', changed: true } }
-  ],
-  action: async () => {
-    await page.getByRole('button', { name: 'Run' }).click();
-  },
-  stepOptions: {
-    waitFor: { source: 'state', id: 'app', path: '/ready', changed: true }
-  }
-});
-
-const proof = createHtmlRuntimeProof(run.proofBuilderInput);
-const artifact = createFrontierPlaywrightRuntimeProofArtifact(run);
-
-console.log(run.runtimeEvidence.runtimeEvidenceBound);
-console.log(proof.browserRuntimeEquivalenceClaim);
-console.log(stringifyFrontierPlaywrightRuntimeProofArtifact(artifact));
-```
-
-`runtimeEvidenceBound` only becomes true for passed runs with command, probe id, evidence hash, and runtime signals. The builder fields keep browser/runtime/cascade/render/semantic/auto-merge claims false until the owning language package admits the proof against exact source bindings.
-
-When the proof should be bound to concrete browser assertions, use `runFrontierPlaywrightAssertionRuntimeProof(...)` with `dom-text`, `dom-attribute`, or `computed-style` assertions. Failed assertions return failed runtime evidence instead of a merge-admissible proof.
 
 ## Benchmarks
 
